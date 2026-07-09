@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #FAF8F5;
+    color: #2E2E2E;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5 {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+}
+
+@layer components {
+  .btn-gold {
+    @apply inline-flex items-center justify-center px-8 py-3.5 bg-gold-300 text-white font-sans font-medium text-sm tracking-wide rounded-full transition-all duration-300 hover:bg-gold-400 hover:shadow-gold hover:-translate-y-0.5 active:translate-y-0;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center px-8 py-3.5 border border-white/60 text-white font-sans font-medium text-sm tracking-wide rounded-full transition-all duration-300 hover:bg-white/10 hover:border-white hover:-translate-y-0.5 backdrop-blur-sm;
+  }
+
+  .btn-outline-dark {
+    @apply inline-flex items-center justify-center px-8 py-3.5 border border-charcoal-300 text-charcoal-300 font-sans font-medium text-sm tracking-wide rounded-full transition-all duration-300 hover:bg-charcoal-300 hover:text-white hover:-translate-y-0.5;
+  }
+
+  .section-label {
+    @apply font-sans text-xs font-semibold tracking-[0.2em] uppercase text-gold-300;
+  }
+
+  .section-title {
+    @apply font-serif text-4xl md:text-5xl font-normal text-charcoal-300 leading-tight;
+  }
+
+  .section-subtitle {
+    @apply font-sans text-base md:text-lg text-charcoal-100 leading-relaxed font-light;
+  }
+}
+
+@layer utilities {
+  .animate-on-scroll {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+  }
+
+  .animate-on-scroll.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .delay-100 { transition-delay: 100ms; }
+  .delay-200 { transition-delay: 200ms; }
+  .delay-300 { transition-delay: 300ms; }
+  .delay-400 { transition-delay: 400ms; }
+  .delay-500 { transition-delay: 500ms; }
+
+  .text-shadow {
+    text-shadow: 0 2px 20px rgba(0,0,0,0.4);
+  }
+
+  .text-shadow-lg {
+    text-shadow: 0 4px 30px rgba(0,0,0,0.6);
+  }
+}
