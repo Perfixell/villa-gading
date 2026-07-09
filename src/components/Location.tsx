@@ -60,7 +60,7 @@ export default function Location() {
                   href="tel:+6208993176567"
                   className="font-sans text-sm text-charcoal-300 hover:text-gold-300 transition-colors"
                 >
-                  0899-3176-567
+                  +62 0899-3176-567
                 </a>
               </div>
             </div>
