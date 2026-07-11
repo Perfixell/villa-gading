@@ -9,7 +9,7 @@ const villa1Highlights = [
   'Bathtub',
   'Hot & Cold Water Dispenser',
   'Fast Wi-Fi',
-  'Peaceful Rice Field Views',
+  'Peaceful Rice Field Views Nearby',
   'Family Friendly',
   'Nearby Cafés & Restaurants',
   'Large Parking Area',
