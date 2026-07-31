@@ -1,0 +1,35 @@
+
+[functions.booking-calendar]
+enabled = true
+verify_jwt = false
+import_map = "./functions/booking-calendar/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/booking-calendar/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/booking-calendar/*.html" ]
+
+[functions.midtrans-create-transaction]
+enabled = true
+verify_jwt = false
+import_map = "./functions/midtrans-create-transaction/deno.json"
+entrypoint = "./functions/midtrans-create-transaction/index.ts"
+
+[functions.midtrans-webhook]
+enabled = true
+verify_jwt = false
+import_map = "./functions/midtrans-webhook/deno.json"
+entrypoint = "./functions/midtrans-webhook/index.ts"
+
+[functions.booking-create]
+enabled = true
+verify_jwt = false
+import_map = "./functions/booking-create/deno.json"
+entrypoint = "./functions/booking-create/index.ts"
+
+[functions.booking-ical-export]
+enabled = true
+verify_jwt = false
+import_map = "./functions/booking-ical-export/deno.json"
+entrypoint = "./functions/booking-ical-export/index.ts"

@@ -9,6 +9,10 @@ const navLinks = [
   { label: 'Location', href: '#location' },
 ];
 
+interface FooterProps {
+  onOpenTerms: () => void;
+}
+
 function WhatsAppIcon({ size }: { size: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
@@ -17,7 +21,7 @@ function WhatsAppIcon({ size }: { size: number }) {
   );
 }
 
-export default function Footer() {
+export default function Footer({ onOpenTerms }: FooterProps) {
   const handleNavClick = (href: string) => {
     const el = document.querySelector(href);
     if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -84,6 +88,15 @@ export default function Footer() {
                   </a>
                 </li>
               ))}
+              <li>
+                <button
+                  type="button"
+                  onClick={onOpenTerms}
+                  className="font-sans text-sm text-white/60 hover:text-white transition-colors duration-300"
+                >
+                  Terms & Conditions
+                </button>
+              </li>
             </ul>
           </div>
 

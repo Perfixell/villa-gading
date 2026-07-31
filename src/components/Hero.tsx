@@ -2,7 +2,11 @@ import { ChevronDown } from 'lucide-react';
 
 const BASE = import.meta.env.BASE_URL;
 
-export default function Hero() {
+interface HeroProps {
+  onBook: () => void;
+}
+
+export default function Hero({ onBook }: HeroProps) {
   const scrollToAbout = () => {
     const el = document.querySelector('#about');
     if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -59,14 +63,12 @@ export default function Hero() {
           className="flex flex-col sm:flex-row gap-4 justify-center"
           style={{ animation: 'fadeUp 0.9s ease-out 0.8s both' }}
         >
-          <a
-            href="https://www.booking.com/hotel/id/villa-gading-kab-gianyar.id.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-gold text-sm px-10 py-4"
-          >
-            Book Your Stay
-          </a>
+<button
+  onClick={onBook}
+  className="btn-gold text-sm px-10 py-4"
+>
+  Book Your Stay
+</button>
           <button
             onClick={scrollToVillas}
             className="btn-outline text-sm px-10 py-4"

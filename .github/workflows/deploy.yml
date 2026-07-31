@@ -31,22 +31,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Determine base URL
-        id: base
-        run: |
-          REPO_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2)
-          OWNER=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f1)
-          # User/org pages repos (username.github.io) use root base
-          if [[ "$REPO_NAME" == "$OWNER.github.io" ]]; then
-            echo "base=/" >> $GITHUB_OUTPUT
-          else
-            echo "base=/$REPO_NAME/" >> $GITHUB_OUTPUT
-          fi
-
       - name: Build
         run: npm run build
         env:
-          VITE_BASE_URL: ${{ steps.base.outputs.base }}
+          VITE_BASE_URL: /
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

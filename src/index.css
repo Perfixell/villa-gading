@@ -72,3 +72,44 @@
     text-shadow: 0 4px 30px rgba(0,0,0,0.6);
   }
 }
+
+.booking-datepicker .react-datepicker__day.booking-day-blocked {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  border-radius: 9999px;
+}
+
+.booking-datepicker .react-datepicker__day--disabled.booking-day-blocked {
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.booking-datepicker .react-datepicker__day--selected {
+  background-color: #111827;
+  color: #ffffff;
+}
+
+.booking-datepicker .react-datepicker__day--keyboard-selected {
+  background-color: #d1d5db;
+  color: #111827;
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  animation: skeleton-shimmer 1.2s infinite;
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
