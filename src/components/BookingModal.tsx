@@ -550,28 +550,30 @@ if (bookingCreated) {
 
           <div>
             <label className="mb-2 block font-medium">Adults</label>
-            <input
-              type="number"
-              min={1}
-              max={MAX_GUESTS}
+            <select
               value={adults}
               onChange={(e) => setAdults(Number(e.target.value))}
               className="w-full rounded-xl border p-3"
               disabled={saving}
-            />
+            >
+              {Array.from({ length: MAX_GUESTS }, (_, index) => index + 1).map((count) => (
+                <option key={count} value={count}>{count}</option>
+              ))}
+            </select>
           </div>
 
           <div>
             <label className="mb-2 block font-medium">Children</label>
-            <input
-              type="number"
-              min={0}
-              max={MAX_GUESTS}
+            <select
               value={children}
               onChange={(e) => setChildren(Number(e.target.value))}
               className="w-full rounded-xl border p-3"
               disabled={saving}
-            />
+            >
+              {Array.from({ length: MAX_GUESTS + 1 }, (_, index) => index).map((count) => (
+                <option key={count} value={count}>{count}</option>
+              ))}
+            </select>
           </div>
 
           <div>

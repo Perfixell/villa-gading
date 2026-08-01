@@ -158,9 +158,9 @@ The booking form and `booking-create` function support Cloudflare Turnstile with
 
 1. Create a **Managed** Turnstile widget in Cloudflare named `Villa Gading Booking`.
 2. Allow only `villagading.com` and `www.villagading.com` as production hostnames.
-3. Add the public site key to the `villa-gading` GitHub repository as an Actions variable named `VITE_TURNSTILE_SITE_KEY`.
+3. The public site key is already configured in the GitHub Pages workflow.
 4. Add the private secret key in Supabase Dashboard under **Edge Functions > Secrets** as `TURNSTILE_SECRET_KEY`.
-5. Re-run the public GitHub Pages deployment and redeploy `booking-create`.
+5. Re-run the public GitHub Pages deployment only if the security check is not visible yet.
 
 Never put the Turnstile secret in GitHub source, a Vite variable, or browser code. Turnstile enforcement turns on automatically when the server secret is present.
 
