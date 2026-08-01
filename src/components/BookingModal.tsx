@@ -93,6 +93,7 @@ export default function BookingModal({ isOpen, onClose, onOpenTerms }: BookingMo
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   const [emailError, setEmailError] = useState("");
+  const [pricingError, setPricingError] = useState("");
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState("");
   const [paymentError, setPaymentError] = useState("");
@@ -115,6 +116,7 @@ export default function BookingModal({ isOpen, onClose, onOpenTerms }: BookingMo
     setNightlyBreakdown([]);
     setTotalPrice(0);
     setEmailError("");
+    setPricingError("");
     setSubmitError("");
     setSubmitSuccess("");
     setPaymentError("");
@@ -165,6 +167,10 @@ useEffect(() => {
 }, [isOpen]);
 
   useEffect(() => {
+    setPricingError("");
+  }, [villaId, checkIn, checkOut]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function loadBlockedDates() {
@@ -200,6 +206,7 @@ useEffect(() => {
         setNightlyBreakdown([]);
         setTotalPrice(0);
         setLoadingPricing(false);
+        setPricingError("");
         return;
       }
 
@@ -210,12 +217,16 @@ useEffect(() => {
         if (!cancelled) {
           setTotalPrice(pricing.total);
           setNightlyBreakdown(pricing.nightlyBreakdown);
+          setPricingError("");
         }
       } catch (err) {
         console.error(err);
         if (!cancelled) {
           setTotalPrice(0);
           setNightlyBreakdown([]);
+          setPricingError(
+            err instanceof Error ? err.message : "Pricing is unavailable right now."
+          );
         }
       } finally {
         if (!cancelled) setLoadingPricing(false);
@@ -245,7 +256,9 @@ useEffect(() => {
     setPaymentError("");
 
     if (loadingBlockedDates || loadingPricing) {
-      setSubmitError("Please wait for availability and pricing to finish loading.");
+      setSubmitError(
+        pricingError || "Please wait for availability and pricing to finish loading."
+      );
       return;
     }
 
@@ -290,7 +303,7 @@ useEffect(() => {
     }
 
     if (nights === 0) {
-      setSubmitError("Price is still loading. Please wait a moment.");
+      setSubmitError(pricingError || "Price is still loading. Please wait a moment.");
       return;
     }
 
@@ -638,6 +651,12 @@ if (bookingCreated) {
               <div className="h-4 w-5/6 rounded bg-gray-200 skeleton" />
               <div className="h-4 w-4/5 rounded bg-gray-200 skeleton" />
             </div>
+          </div>
+        )}
+
+        {pricingError && !loadingPricing && checkIn && checkOut && (
+          <div className="mt-6 mb-6 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+            {pricingError}
           </div>
         )}
 

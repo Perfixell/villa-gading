@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { getVillas } from "./services/villas";
+import { useState } from "react";
 import BookingModal from "./components/BookingModal";
 
 
@@ -15,28 +14,10 @@ import BookingCTA from './components/BookingCTA';
 import Footer from './components/Footer';
 import BackToTop from './components/BackToTop';
 import TermsModal from './components/TermsModal';
-import { getPricingPeriods } from "./services/pricing";
 
 export default function App() {
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
-
-useEffect(() => {
-  async function test() {
-    try {
-      const villas = await getVillas();
-      console.log("Supabase villas:", villas);
-
-      const pricing = await getPricingPeriods(1);
-      console.log("Pricing:", pricing);
-    } catch (err) {
-  console.error("❌ Error:");
-  console.error(err);
-}
-  }
-
-  test();
-}, []);
 
 return (
     <div className="min-h-screen bg-cream-100 font-sans">

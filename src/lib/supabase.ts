@@ -1,6 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 
+function normalizeSupabaseUrl(value: string) {
+  return value.replace(/\/rest\/v1\/?$/i, "");
+}
+
 export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL!,
+  normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL!),
   import.meta.env.VITE_SUPABASE_ANON_KEY!
 );
