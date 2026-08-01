@@ -66,6 +66,7 @@ async function fetchBookings(supabaseUrl: string, serviceRoleKey: string, villaI
     "?select=check_in,check_out,booking_reference,guest_name" +
     `&villa_id=eq.${villaId}` +
     "&booking_status=neq.cancelled" +
+    `&or=(booking_status.neq.pending_payment,expires_at.gt.${encodeURIComponent(new Date().toISOString())})` +
     "&order=check_in.asc";
 
   const res = await fetch(endpoint, {

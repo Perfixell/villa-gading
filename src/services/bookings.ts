@@ -8,6 +8,7 @@ export async function createBooking(data: {
   check_in: string;
   check_out: string;
   special_requests?: string;
+  turnstile_token?: string;
 }) {
   const res = await fetch(
     "https://qbjyjkeflhkepprtlfiq.functions.supabase.co/booking-create",

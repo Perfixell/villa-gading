@@ -24,6 +24,7 @@ type BookingRow = {
   payment_status: string;
   booking_status: string;
   midtrans_order_id: string | null;
+  expires_at: string | null;
 };
 
 function json(body: unknown, status = 200) {
@@ -55,7 +56,7 @@ async function fetchBookingByReference(
 ): Promise<BookingRow | null> {
   const endpoint =
     `${supabaseUrl}/rest/v1/bookings` +
-    "?select=id,booking_reference,villa_id,guest_name,email,phone,check_in,check_out,total_price,payment_status,booking_status,midtrans_order_id" +
+    "?select=id,booking_reference,villa_id,guest_name,email,phone,check_in,check_out,total_price,payment_status,booking_status,midtrans_order_id,expires_at" +
     `&booking_reference=eq.${encodeURIComponent(bookingReference)}` +
     "&limit=1";
 
@@ -188,6 +189,13 @@ Deno.serve(async (req: Request) => {
 
     if (!booking) {
       return json({ error: "Booking not found" }, 404);
+    }
+
+    if (
+      booking.booking_status === "cancelled" ||
+      (booking.expires_at && new Date(booking.expires_at).getTime() <= Date.now())
+    ) {
+      return json({ error: "This payment session has expired. Please create a new booking." }, 410);
     }
 
     if (booking.payment_status === "paid") {

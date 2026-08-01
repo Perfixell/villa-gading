@@ -57,6 +57,15 @@ function formatCurrency(amount: number) {
   }).format(amount);
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 async function fetchBookingByOrderId(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -124,8 +133,8 @@ async function sendConfirmationEmail(
       html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111827;">
           <h2>Your Villa Booking is Confirmed</h2>
-          <p>Hi ${booking.guest_name}, your payment has been received and your booking is confirmed.</p>
-          <p><strong>Reference:</strong> ${booking.booking_reference}</p>
+          <p>Hi ${escapeHtml(booking.guest_name)}, your payment has been received and your booking is confirmed.</p>
+          <p><strong>Reference:</strong> ${escapeHtml(booking.booking_reference)}</p>
           <p><strong>Villa:</strong> Villa ${booking.villa_id}</p>
           <p><strong>Check-in:</strong> ${booking.check_in}</p>
           <p><strong>Check-out:</strong> ${booking.check_out}</p>

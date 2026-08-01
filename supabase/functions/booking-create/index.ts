@@ -9,7 +9,13 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Content-Type": "application/json",
+  "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff",
 };
+
+const BOOKING_HOLD_MINUTES = 30;
+const MAX_STAY_NIGHTS = 30;
+const MAX_ADVANCE_DAYS = 730;
 
 type VillaId = 1 | 2;
 
@@ -23,6 +29,7 @@ type CreateBookingPayload = {
   check_in: string;
   check_out: string;
   special_requests?: string;
+  turnstile_token?: string;
 };
 
 type BookingRow = {
@@ -151,6 +158,7 @@ async function insertBooking(
       ...payload,
       payment_status: "pending",
       booking_status: "pending_payment",
+      expires_at: new Date(Date.now() + BOOKING_HOLD_MINUTES * 60_000).toISOString(),
     }),
   });
 
@@ -158,6 +166,48 @@ async function insertBooking(
     const text = await res.text();
     throw new Error(`Failed to create booking (${res.status}): ${text}`);
   }
+}
+
+async function expireStaleBookings(supabaseUrl: string, serviceRoleKey: string) {
+  const now = new Date().toISOString();
+  const endpoint =
+    `${supabaseUrl}/rest/v1/bookings` +
+    "?booking_status=eq.pending_payment" +
+    `&expires_at=lt.${encodeURIComponent(now)}`;
+  const res = await fetch(endpoint, {
+    method: "PATCH",
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({ booking_status: "cancelled", payment_status: "expired" }),
+  });
+  if (!res.ok) throw new Error(`Failed to expire stale bookings (${res.status})`);
+}
+
+async function validateTurnstile(token: string, secret: string) {
+  const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      secret,
+      response: token,
+      idempotency_key: crypto.randomUUID(),
+    }),
+  });
+  if (!res.ok) return false;
+  const result = (await res.json()) as {
+    success?: boolean;
+    hostname?: string;
+    action?: string;
+  };
+  return Boolean(
+    result.success &&
+    result.action === "booking" &&
+    (result.hostname === "villagading.com" || result.hostname === "www.villagading.com"),
+  );
 }
 
 async function calculateAuthoritativePrice(
@@ -180,6 +230,13 @@ async function calculateAuthoritativePrice(
   const start = parseYmdUtc(checkIn);
   const end = parseYmdUtc(checkOut);
   if (!start || !end || start >= end) throw new Error("Invalid stay dates");
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const latestAllowed = addUtcDays(today, MAX_ADVANCE_DAYS);
+  const requestedNights = Math.round((end.getTime() - start.getTime()) / 86_400_000);
+  if (start < today || start > latestAllowed || requestedNights > MAX_STAY_NIGHTS) {
+    throw new Error("Stay dates are outside the allowed booking window");
+  }
 
   let total = 0;
   let nights = 0;
@@ -209,6 +266,13 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = getEnv("SUPABASE_URL");
     const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+    const turnstileSecret = Deno.env.get("TURNSTILE_SECRET_KEY")?.trim();
+
+    const contentLength = Number(req.headers.get("content-length") ?? "0");
+    if (contentLength > 16_384) return json({ error: "Request is too large" }, 413);
+    if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+      return json({ error: "Content-Type must be application/json" }, 415);
+    }
 
     const payload = (await req.json()) as CreateBookingPayload;
 
@@ -233,6 +297,15 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Invalid booking details" }, 400);
     }
 
+    if (turnstileSecret) {
+      if (!payload.turnstile_token || payload.turnstile_token.length > 2048) {
+        return json({ error: "Security verification is required" }, 403);
+      }
+      if (!(await validateTurnstile(payload.turnstile_token, turnstileSecret))) {
+        return json({ error: "Security verification failed. Please try again." }, 403);
+      }
+    }
+
     const totalPrice = await calculateAuthoritativePrice(
       supabaseUrl,
       serviceRoleKey,
@@ -241,6 +314,7 @@ Deno.serve(async (req: Request) => {
       payload.check_out,
     );
 
+    await expireStaleBookings(supabaseUrl, serviceRoleKey);
     const blockedDates = await fetchBlockedDates(supabaseUrl, serviceRoleKey, payload.villa_id);
 
     if (isDateRangeBlocked(payload.check_in, payload.check_out, blockedDates)) {
@@ -271,6 +345,7 @@ Deno.serve(async (req: Request) => {
       guest_name: payload.guest_name.trim(),
       email: payload.email.trim().toLowerCase(),
       special_requests: payload.special_requests?.trim(),
+      turnstile_token: undefined,
       booking_reference: bookingReference,
       total_price: totalPrice,
     });

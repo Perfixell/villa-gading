@@ -129,6 +129,49 @@ GitHub Pages does not support using both an apex domain and a custom subdomain o
 
 Do not create a wildcard DNS record. Verify the domain in the GitHub account before adding the DNS record to reduce subdomain-takeover risk.
 
+## Cloudflare Security
+
+The Cloudflare zone is configured with:
+
+- proxied GitHub Pages records for `villagading.com`, `www`, and `admin`;
+- DNS-only mail records so SMTP/IMAP traffic is not sent through Cloudflare's web proxy;
+- Full (strict) origin TLS, minimum TLS 1.2, TLS 1.3, and Always Use HTTPS;
+- Cloudflare's Managed Free WAF ruleset;
+- response security headers including CSP, clickjacking protection, MIME sniffing protection, a restrictive Permissions Policy, and a strict referrer policy.
+
+HSTS is intentionally disabled until the Cloudflare zone is active and HTTPS has been verified on every hostname. Enabling it prematurely can make the domain inaccessible.
+
+### Activate Cloudflare at DomaiNesia
+
+In MyDomaiNesia, replace the current authoritative nameservers with the two assigned by Cloudflare:
+
+```text
+fish.ns.cloudflare.com
+matias.ns.cloudflare.com
+```
+
+Do not modify the GitHub Pages A/CNAME records during this change. After Cloudflare reports the zone as Active, verify the public site, admin site, and mail service before enabling HSTS.
+
+### Enable Turnstile booking protection
+
+The booking form and `booking-create` function support Cloudflare Turnstile with mandatory server-side verification. To activate it:
+
+1. Create a **Managed** Turnstile widget in Cloudflare named `Villa Gading Booking`.
+2. Allow only `villagading.com` and `www.villagading.com` as production hostnames.
+3. Add the public site key to the `villa-gading` GitHub repository as an Actions variable named `VITE_TURNSTILE_SITE_KEY`.
+4. Add the private secret key in Supabase Dashboard under **Edge Functions > Secrets** as `TURNSTILE_SECRET_KEY`.
+5. Re-run the public GitHub Pages deployment and redeploy `booking-create`.
+
+Never put the Turnstile secret in GitHub source, a Vite variable, or browser code. Turnstile enforcement turns on automatically when the server secret is present.
+
+### Booking abuse controls
+
+- Turnstile tokens are verified for the `booking` action and accepted only from the production hostnames.
+- Tokens are single-use and validated before database work.
+- Stay length is limited to 30 nights and bookings to 730 days in advance.
+- Request bodies are limited to 16 KB.
+- Unpaid bookings expire after 30 minutes so they cannot hold inventory indefinitely.
+
 ## GitHub Pages Custom Domain
 
 This project is built with root-relative asset paths for a custom domain.
