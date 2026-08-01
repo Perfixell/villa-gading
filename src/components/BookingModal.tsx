@@ -122,7 +122,7 @@ export default function BookingModal({ isOpen, initialVillaId = 1, onClose, onOp
     setSubmitSuccess("");
     setPaymentError("");
     setAgreedToTerms(false);
-  }
+  }, [initialVillaName]);
 
   function handleClose() {
     resetForm();
@@ -166,7 +166,7 @@ useEffect(() => {
     resetForm();
   } else if (!bookingCreated) {
     setVilla(initialVillaName);
-  }, [initialVillaName]);
+  }
 }, [isOpen, initialVillaName, bookingCreated, resetForm]);
 
   useEffect(() => {
