@@ -1,22 +1,4 @@
-export async function isVillaAvailable(
-  villaId: number,
-  checkIn: string,
-  checkOut: string
-) {
-  const { supabase } = await import("../lib/supabase");
-  const { data, error } = await supabase.rpc("check_villa_availability", {
-    p_villa_id: villaId,
-    p_check_in: checkIn,
-    p_check_out: checkOut,
-  });
-
-  if (error) throw error;
-
-  return Boolean(data);
-}
-
 export async function createBooking(data: {
-  booking_reference: string;
   villa_id: number;
   guest_name: string;
   email: string;
@@ -25,7 +7,6 @@ export async function createBooking(data: {
   children: number;
   check_in: string;
   check_out: string;
-  total_price: number;
   special_requests?: string;
 }) {
   const res = await fetch(
@@ -39,11 +20,24 @@ export async function createBooking(data: {
     }
   );
 
-  const payload = (await res.json()) as { error?: string };
+  const payload = (await res.json()) as {
+    error?: string;
+    booking_reference?: string;
+    total_price?: number;
+  };
 
   if (!res.ok) {
     throw new Error(
       payload.error || "Failed to create booking. Please try again."
     );
   }
+
+  if (!payload.booking_reference || typeof payload.total_price !== "number") {
+    throw new Error("The booking server returned an invalid response.");
+  }
+
+  return {
+    booking_reference: payload.booking_reference,
+    total_price: payload.total_price,
+  };
 }

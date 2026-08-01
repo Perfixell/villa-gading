@@ -94,6 +94,40 @@ supabase functions deploy midtrans-webhook
 - Frontend only uses anon key.
 - Service role key is only used inside edge functions.
 - Never commit service role key to Git.
+- Booking references and prices are generated and validated by `booking-create`; the browser cannot choose the amount charged.
+- Guest booking rows are protected by RLS and are only readable by authorized administrators.
+
+## Admin Dashboard
+
+The same build serves the public site on `villagading.com` and the protected dashboard on `admin.villagading.com`. For local development, open `http://localhost:5173/?admin=1`.
+
+### 1. Deploy the database security migration and booking function
+
+```bash
+supabase db push
+supabase functions deploy booking-create
+```
+
+### 2. Create the first administrator
+
+In Supabase Dashboard, create the user under **Authentication > Users**. Do not add public sign-up to the website. Then run this once in the SQL Editor, replacing the email:
+
+```sql
+insert into public.admin_users (user_id)
+select id from auth.users where lower(email) = lower('owner@example.com')
+on conflict (user_id) do nothing;
+```
+
+The admin page uses Supabase email/password authentication, and database RLS independently verifies membership in `admin_users` for every bookings or pricing query.
+
+### 3. Host `admin.villagading.com`
+
+GitHub Pages does not support using both an apex domain and a custom subdomain on one Pages site (except `www`). Choose one of these deployments:
+
+- **DomaiNesia hosting/cPanel:** create `admin.villagading.com` with its own document root, run `npm run build`, and upload the contents of `dist` to that document root. Ensure AutoSSL is active.
+- **A second GitHub Pages repository:** deploy the same `dist` artifact from a separate repository, set that repository's Pages custom domain to `admin.villagading.com`, then enable HTTPS. In MyDomaiNesia **Domains > villagading.com > DNS Management**, add `CNAME` host `admin` pointing directly to `perfixell.github.io` (not to `villagading.com`).
+
+Do not create a wildcard DNS record. Verify the domain in the GitHub account before adding the DNS record to reduce subdomain-takeover risk.
 
 ## GitHub Pages Custom Domain
 

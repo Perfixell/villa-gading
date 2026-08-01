@@ -6,7 +6,6 @@ import "react-phone-number-input/style.css";
 
 import { calculateBookingPrice } from "../services/pricing";
 import { createBooking } from "../services/bookings";
-import { isVillaAvailable } from "../services/availability";
 import { getBlockedDates } from "../services/bookingCalendar";
 import { createMidtransTransaction } from "../services/payments";
 
@@ -315,18 +314,7 @@ useEffect(() => {
     setSaving(true);
 
     try {
-      const available = await isVillaAvailable(villaId, checkIn, checkOut);
-
-      if (!available) {
-        setSubmitError("Those dates were just booked. Please choose different dates.");
-        return;
-      }
-
-      const reference = `VG-${Date.now()}`;
-      setBookingReference(reference);
-
-      await createBooking({
-        booking_reference: reference,
+      const booking = await createBooking({
         villa_id: villaId,
         guest_name: guestName.trim(),
         email: email.trim(),
@@ -335,15 +323,17 @@ useEffect(() => {
         children,
         check_in: checkIn,
         check_out: checkOut,
-        total_price: totalPrice,
         special_requests: specialRequests.trim() || undefined,
       });
 
+      setBookingReference(booking.booking_reference);
+      setTotalPrice(booking.total_price);
+
       setSubmitSuccess("Booking created. Continue to payment to confirm your stay.");
       setBookingCreated(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Booking Error:", err);
-      setSubmitError(err?.message || "Failed to create booking.");
+      setSubmitError(err instanceof Error ? err.message : "Failed to create booking.");
     } finally {
       setSaving(false);
     }
@@ -373,8 +363,8 @@ useEffect(() => {
       }
 
       window.location.href = result.redirectUrl;
-    } catch (err: any) {
-      setPaymentError(err?.message || "Could not start payment. Please try again.");
+    } catch (err: unknown) {
+      setPaymentError(err instanceof Error ? err.message : "Could not start payment. Please try again.");
     } finally {
       setStartingPayment(false);
     }

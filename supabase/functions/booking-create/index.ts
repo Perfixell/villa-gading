@@ -14,7 +14,6 @@ const CORS_HEADERS = {
 type VillaId = 1 | 2;
 
 type CreateBookingPayload = {
-  booking_reference: string;
   villa_id: VillaId;
   guest_name: string;
   email: string;
@@ -23,7 +22,6 @@ type CreateBookingPayload = {
   children: number;
   check_in: string;
   check_out: string;
-  total_price: number;
   special_requests?: string;
 };
 
@@ -31,6 +29,14 @@ type BookingRow = {
   check_in: string;
   check_out: string;
   booking_status: string;
+};
+
+type PricingRow = {
+  label: string;
+  start_date: string;
+  end_date: string;
+  nightly_price: number;
+  minimum_stay: number;
 };
 
 function json(body: unknown, status = 200) {
@@ -54,9 +60,11 @@ function formatLocalYMD(date: Date) {
 }
 
 function parseYmdUtc(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const [y, m, d] = value.split("-").map(Number);
   if (!y || !m || !d) return null;
-  return new Date(Date.UTC(y, m - 1, d));
+  const parsed = new Date(Date.UTC(y, m - 1, d));
+  return formatLocalYMD(parsed) === value ? parsed : null;
 }
 
 function addUtcDays(date: Date, days: number) {
@@ -129,7 +137,7 @@ async function fetchConflictingBookings(
 async function insertBooking(
   supabaseUrl: string,
   serviceRoleKey: string,
-  payload: CreateBookingPayload,
+  payload: CreateBookingPayload & { booking_reference: string; total_price: number },
 ) {
   const res = await fetch(`${supabaseUrl}/rest/v1/bookings`, {
     method: "POST",
@@ -152,6 +160,43 @@ async function insertBooking(
   }
 }
 
+async function calculateAuthoritativePrice(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  villaId: VillaId,
+  checkIn: string,
+  checkOut: string,
+) {
+  const endpoint =
+    `${supabaseUrl}/rest/v1/pricing_periods` +
+    "?select=label,start_date,end_date,nightly_price,minimum_stay" +
+    `&villa_id=eq.${villaId}&active=eq.true&order=start_date.asc`;
+  const res = await fetch(endpoint, {
+    headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
+  });
+  if (!res.ok) throw new Error(`Failed to load pricing (${res.status})`);
+
+  const periods = (await res.json()) as PricingRow[];
+  const start = parseYmdUtc(checkIn);
+  const end = parseYmdUtc(checkOut);
+  if (!start || !end || start >= end) throw new Error("Invalid stay dates");
+
+  let total = 0;
+  let nights = 0;
+  let minimumStay = 1;
+  for (let date = new Date(start); date < end; date = addUtcDays(date, 1)) {
+    const ymd = formatLocalYMD(date);
+    const period = periods.find((row) => ymd >= row.start_date && ymd <= row.end_date);
+    if (!period) throw new Error(`No pricing configured for ${ymd}`);
+    total += Number(period.nightly_price);
+    minimumStay = Math.max(minimumStay, Number(period.minimum_stay) || 1);
+    nights += 1;
+  }
+  if (nights < minimumStay) throw new Error(`This stay requires at least ${minimumStay} nights`);
+  if (!Number.isSafeInteger(total) || total <= 0) throw new Error("Invalid calculated price");
+  return total;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
@@ -168,17 +213,33 @@ Deno.serve(async (req: Request) => {
     const payload = (await req.json()) as CreateBookingPayload;
 
     if (
-      !payload.booking_reference ||
-      !payload.villa_id ||
+      (payload.villa_id !== 1 && payload.villa_id !== 2) ||
       !payload.guest_name ||
       !payload.email ||
       !payload.phone ||
       !payload.check_in ||
-      !payload.check_out ||
-      !payload.total_price
+      !payload.check_out
     ) {
       return json({ error: "Missing required booking fields" }, 400);
     }
+
+    if (
+      payload.guest_name.trim().length < 2 || payload.guest_name.length > 120 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email) || payload.email.length > 254 ||
+      payload.phone.length > 40 || !Number.isInteger(payload.adults) || !Number.isInteger(payload.children) ||
+      payload.adults < 1 || payload.children < 0 || payload.adults + payload.children > 6 ||
+      (payload.special_requests?.length ?? 0) > 2000
+    ) {
+      return json({ error: "Invalid booking details" }, 400);
+    }
+
+    const totalPrice = await calculateAuthoritativePrice(
+      supabaseUrl,
+      serviceRoleKey,
+      payload.villa_id,
+      payload.check_in,
+      payload.check_out,
+    );
 
     const blockedDates = await fetchBlockedDates(supabaseUrl, serviceRoleKey, payload.villa_id);
 
@@ -204,9 +265,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    await insertBooking(supabaseUrl, serviceRoleKey, payload);
+    const bookingReference = `VG-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    await insertBooking(supabaseUrl, serviceRoleKey, {
+      ...payload,
+      guest_name: payload.guest_name.trim(),
+      email: payload.email.trim().toLowerCase(),
+      special_requests: payload.special_requests?.trim(),
+      booking_reference: bookingReference,
+      total_price: totalPrice,
+    });
 
-    return json({ ok: true, booking_reference: payload.booking_reference }, 201);
+    return json({ ok: true, booking_reference: bookingReference, total_price: totalPrice }, 201);
   } catch (error) {
     return json(
       { error: String(error instanceof Error ? error.message : error) },
