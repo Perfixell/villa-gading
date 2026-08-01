@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import PhoneInput, { isValidPhoneNumber } from "react-phone-number-input";
@@ -11,6 +11,7 @@ import { createMidtransTransaction } from "../services/payments";
 
 interface BookingModalProps {
   isOpen: boolean;
+  initialVillaId?: 1 | 2;
   onClose: () => void;
   onOpenTerms: () => void;
 }
@@ -65,8 +66,9 @@ function isDateRangeBlocked(start: string, end: string, blockedDates: string[]) 
   return false;
 }
 
-export default function BookingModal({ isOpen, onClose, onOpenTerms }: BookingModalProps) {
-  const [villa, setVilla] = useState("Villa Gading");
+export default function BookingModal({ isOpen, initialVillaId = 1, onClose, onOpenTerms }: BookingModalProps) {
+  const initialVillaName = initialVillaId === 2 ? "Villa Gading 2" : "Villa Gading";
+  const [villa, setVilla] = useState(initialVillaName);
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [adults, setAdults] = useState(2);
@@ -100,10 +102,10 @@ export default function BookingModal({ isOpen, onClose, onOpenTerms }: BookingMo
   const villaId: 1 | 2 = villa === "Villa Gading" ? 1 : 2;
   const nights = nightlyBreakdown.length;
 
-  function resetForm() {
+  const resetForm = useCallback(() => {
     setBookingCreated(false);
     setBookingReference("");
-    setVilla("Villa Gading");
+    setVilla(initialVillaName);
     setCheckIn("");
     setCheckOut("");
     setAdults(2);
@@ -162,8 +164,10 @@ export default function BookingModal({ isOpen, onClose, onOpenTerms }: BookingMo
 useEffect(() => {
   if (!isOpen) {
     resetForm();
-  }
-}, [isOpen]);
+  } else if (!bookingCreated) {
+    setVilla(initialVillaName);
+  }, [initialVillaName]);
+}, [isOpen, initialVillaName, bookingCreated, resetForm]);
 
   useEffect(() => {
     setPricingError("");
