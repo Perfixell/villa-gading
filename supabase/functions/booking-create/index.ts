@@ -182,9 +182,14 @@ async function expireStaleBookings(supabaseUrl: string, serviceRoleKey: string) 
       "Content-Type": "application/json",
       Prefer: "return=minimal",
     },
-    body: JSON.stringify({ booking_status: "cancelled", payment_status: "expired" }),
+    // Keep payment_status within the same values used by the Midtrans webhook.
+    // The database rejects the unsupported value "expired" with HTTP 400.
+    body: JSON.stringify({ booking_status: "cancelled", payment_status: "failed" }),
   });
-  if (!res.ok) throw new Error(`Failed to expire stale bookings (${res.status})`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to expire stale bookings (${res.status}): ${text}`);
+  }
 }
 
 async function validateTurnstile(token: string, secret: string) {
