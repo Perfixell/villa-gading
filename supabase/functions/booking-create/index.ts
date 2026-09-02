@@ -65,6 +65,42 @@ function getEnv(name: string) {
   return value;
 }
 
+class RequestBodyTooLargeError extends Error {}
+
+async function readJsonBody<T>(req: Request, maxBytes: number): Promise<T> {
+  const declaredLength = Number(req.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new RequestBodyTooLargeError();
+  }
+  if (!req.body) throw new SyntaxError("Missing request body");
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel();
+        throw new RequestBodyTooLargeError();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(body)) as T;
+}
+
 function formatLocalYMD(date: Date) {
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -286,13 +322,11 @@ Deno.serve(async (req: Request) => {
     // must disable booking rather than silently disable bot protection.
     const turnstileSecret = getEnv("TURNSTILE_SECRET_KEY");
 
-    const contentLength = Number(req.headers.get("content-length") ?? "0");
-    if (contentLength > 16_384) return json({ error: "Request is too large" }, 413);
     if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
       return json({ error: "Content-Type must be application/json" }, 415);
     }
 
-    const payload = (await req.json()) as CreateBookingPayload;
+    const payload = await readJsonBody<CreateBookingPayload>(req, 16_384);
 
     if (
       (payload.villa_id !== 1 && payload.villa_id !== 2) ||
@@ -375,6 +409,12 @@ Deno.serve(async (req: Request) => {
       payment_token: paymentToken,
     }, 201);
   } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return json({ error: "Request is too large" }, 413);
+    }
+    if (error instanceof SyntaxError) {
+      return json({ error: "Invalid JSON payload" }, 400);
+    }
     console.error("booking-create failed", error);
     return json(
       { error: "Booking could not be created. Please try again." },

@@ -38,9 +38,13 @@ Use a separate, randomly generated value of at least 32 bytes for `BOOKING_ICAL_
 
 Supabase automatically provides its server-side project URL and secret/service-role credentials to Edge Functions. Never copy those credentials into the frontend.
 
-## Database and Edge Functions
+## Coordinated production rollout
 
-Link the intended project, review the target, then deploy migrations and functions:
+The payment capability migration, `booking-create`, `midtrans-create-transaction`, and the public frontend are version-coupled. Do not deploy them independently.
+
+Prepare and build the matching public frontend first. Then use a maintenance window with public booking temporarily unavailable: resolve every legacy `pending_payment` booking that lacks a capability hash, apply the migration, deploy all functions, immediately deploy the prepared frontend, run the security smoke tests, and only then reopen booking. The migration intentionally stops rather than silently modifying a possibly real reservation.
+
+With public booking already in maintenance mode, link and verify the intended Supabase project, then deploy the database and functions:
 
 ```bash
 supabase link --project-ref YOUR_PROJECT_REF
@@ -51,6 +55,8 @@ supabase functions deploy booking-ical-export
 supabase functions deploy midtrans-create-transaction
 supabase functions deploy midtrans-webhook
 ```
+
+Immediately deploy the matching public frontend with its public Turnstile site key configured. Until it is live and verified, keep booking in maintenance mode because the fail-closed function correctly rejects old clients.
 
 The private website-to-Booking.com availability feed has this shape:
 

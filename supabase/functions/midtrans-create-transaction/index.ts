@@ -41,6 +41,42 @@ function getEnv(name: string) {
   return value;
 }
 
+class RequestBodyTooLargeError extends Error {}
+
+async function readJsonBody<T>(req: Request, maxBytes: number): Promise<T> {
+  const declaredLength = Number(req.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new RequestBodyTooLargeError();
+  }
+  if (!req.body) throw new SyntaxError("Missing request body");
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel();
+        throw new RequestBodyTooLargeError();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(body)) as T;
+}
+
 function toBasicAuth(serverKey: string) {
   return `Basic ${btoa(`${serverKey}:`)}`;
 }
@@ -191,13 +227,11 @@ Deno.serve(async (req: Request) => {
     const midtransServerKey = getEnv("MIDTRANS_SERVER_KEY");
     const isProduction = (Deno.env.get("MIDTRANS_IS_PRODUCTION") ?? "false") === "true";
 
-    const contentLength = Number(req.headers.get("content-length") ?? "0");
-    if (contentLength > 4096) return json({ error: "Request is too large" }, 413);
     if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
       return json({ error: "Content-Type must be application/json" }, 415);
     }
 
-    const body = (await req.json()) as { bookingReference?: string; paymentToken?: string };
+    const body = await readJsonBody<{ bookingReference?: string; paymentToken?: string }>(req, 4096);
     const bookingReference = body.bookingReference?.trim();
     const paymentToken = body.paymentToken?.trim();
 
@@ -259,6 +293,12 @@ Deno.serve(async (req: Request) => {
       orderId,
     });
   } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return json({ error: "Request is too large" }, 413);
+    }
+    if (error instanceof SyntaxError) {
+      return json({ error: "Invalid JSON payload" }, 400);
+    }
     console.error("midtrans-create-transaction failed", error);
     return json(
       {

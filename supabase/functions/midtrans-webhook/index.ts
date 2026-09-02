@@ -32,6 +32,7 @@ type BookingRow = {
   total_price: number;
   payment_status: string;
   booking_status: string;
+  expires_at: string | null;
   paid_at: string | null;
   confirmation_email_sent_at: string | null;
 };
@@ -47,6 +48,42 @@ function getEnv(name: string) {
   const value = Deno.env.get(name);
   if (!value) throw new Error(`Missing environment variable ${name}`);
   return value;
+}
+
+class RequestBodyTooLargeError extends Error {}
+
+async function readJsonBody<T>(req: Request, maxBytes: number): Promise<T> {
+  const declaredLength = Number(req.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new RequestBodyTooLargeError();
+  }
+  if (!req.body) throw new SyntaxError("Missing request body");
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel();
+        throw new RequestBodyTooLargeError();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(body)) as T;
 }
 
 function formatCurrency(amount: number) {
@@ -73,7 +110,7 @@ async function fetchBookingByOrderId(
 ): Promise<BookingRow | null> {
   const endpoint =
     `${supabaseUrl}/rest/v1/bookings` +
-    "?select=id,booking_reference,villa_id,guest_name,email,check_in,check_out,total_price,payment_status,booking_status,paid_at,confirmation_email_sent_at" +
+    "?select=id,booking_reference,villa_id,guest_name,email,check_in,check_out,total_price,payment_status,booking_status,expires_at,paid_at,confirmation_email_sent_at" +
     `&midtrans_order_id=eq.${encodeURIComponent(orderId)}` +
     "&limit=1";
 
@@ -228,9 +265,16 @@ async function updateBookingFromWebhook(
   supabaseUrl: string,
   serviceRoleKey: string,
   orderId: string,
+  expectedPaymentStatus: string,
+  expectedBookingStatus: string,
   patchData: Record<string, unknown>,
 ) {
-  const endpoint = `${supabaseUrl}/rest/v1/bookings?midtrans_order_id=eq.${encodeURIComponent(orderId)}`;
+  const endpoint =
+    `${supabaseUrl}/rest/v1/bookings` +
+    `?midtrans_order_id=eq.${encodeURIComponent(orderId)}` +
+    `&payment_status=eq.${encodeURIComponent(expectedPaymentStatus)}` +
+    `&booking_status=eq.${encodeURIComponent(expectedBookingStatus)}` +
+    "&select=id";
 
   const res = await fetch(endpoint, {
     method: "PATCH",
@@ -238,7 +282,7 @@ async function updateBookingFromWebhook(
       apikey: serviceRoleKey,
       Authorization: `Bearer ${serviceRoleKey}`,
       "Content-Type": "application/json",
-      Prefer: "return=minimal",
+      Prefer: "return=representation",
     },
     body: JSON.stringify(patchData),
   });
@@ -246,6 +290,8 @@ async function updateBookingFromWebhook(
   if (!res.ok) {
     throw new Error(`Failed to update booking from webhook (${res.status})`);
   }
+  const rows = (await res.json()) as Array<{ id: string }>;
+  return rows.length === 1;
 }
 
 Deno.serve(async (req: Request) => {
@@ -264,13 +310,11 @@ Deno.serve(async (req: Request) => {
     const resendApiKey = Deno.env.get("RESEND_API_KEY") ?? "";
     const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") ?? "";
 
-    const contentLength = Number(req.headers.get("content-length") ?? "0");
-    if (contentLength > 16_384) return json({ error: "Request is too large" }, 413);
     if (!req.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
       return json({ error: "Content-Type must be application/json" }, 415);
     }
 
-    const payload = (await req.json()) as MidtransWebhookPayload;
+    const payload = await readJsonBody<MidtransWebhookPayload>(req, 16_384);
 
     if (
       !payload.order_id ||
@@ -306,32 +350,59 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
-    // Midtrans can retry or deliver notifications out of order. A stale
-    // pending/failure notification must never undo an accepted payment.
-    // Refund and chargeback notifications remain valid after settlement.
+    // Refunded payments are terminal. A delayed or replayed settlement must
+    // never resurrect a cancelled stay after money has been returned.
+    if (booking.payment_status === "refunded" && statusPatch.payment_status !== "refunded") {
+      return json({ ok: true });
+    }
+
+    // Once payment is accepted, only a refund or chargeback may change it.
+    // This also preserves completed or manually cancelled booking states.
+    if (booking.payment_status === "paid" && statusPatch.payment_status !== "refunded") {
+      return json({ ok: true });
+    }
+
+    // Pending and failure notifications cannot reopen a cancelled booking.
     if (
-      booking.payment_status === "paid" &&
+      booking.booking_status === "cancelled" &&
       (statusPatch.payment_status === "pending" || statusPatch.payment_status === "failed")
     ) {
       return json({ ok: true });
     }
+
     const patchData: Record<string, unknown> = {
       ...statusPatch,
     };
 
     if (statusPatch.payment_status === "paid") {
       patchData.paid_at = payload.settlement_time ?? new Date().toISOString();
+      const holdExpired = booking.expires_at && new Date(booking.expires_at).getTime() <= Date.now();
+      if (booking.booking_status === "cancelled" || holdExpired) {
+        // Record the money received for operator refund/reconciliation, but do
+        // not reclaim inventory that may already have been sold to another guest.
+        patchData.booking_status = "cancelled";
+      } else if (booking.booking_status === "completed") {
+        patchData.booking_status = "completed";
+      }
     }
 
-    await updateBookingFromWebhook(
+    const updated = await updateBookingFromWebhook(
       supabaseUrl,
       serviceRoleKey,
       payload.order_id,
+      booking.payment_status,
+      booking.booking_status,
       patchData,
     );
+    if (!updated) {
+      // Another webhook or operator changed the row after it was read. Let the
+      // next provider retry re-evaluate the new state instead of overwriting it.
+      return json({ ok: true });
+    }
 
     if (
       statusPatch.payment_status === "paid" &&
+      patchData.booking_status === "confirmed" &&
       booking.confirmation_email_sent_at === null &&
       resendApiKey &&
       resendFromEmail
@@ -346,6 +417,12 @@ Deno.serve(async (req: Request) => {
 
     return json({ ok: true });
   } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return json({ error: "Request is too large" }, 413);
+    }
+    if (error instanceof SyntaxError) {
+      return json({ error: "Invalid JSON payload" }, 400);
+    }
     console.error("midtrans-webhook failed", error);
     return json(
       {
